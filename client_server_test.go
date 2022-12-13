@@ -45,7 +45,14 @@ var cstDialer = Dialer{
 	HandshakeTimeout: 30 * time.Second,
 }
 
-type cstHandler struct{ *testing.T }
+type cstHandlerConfig struct {
+	contextTakeover bool
+}
+
+type cstHandler struct {
+	*testing.T
+	cstHandlerConfig
+}
 
 type cstServer struct {
 	*httptest.Server
@@ -59,17 +66,17 @@ const (
 	cstRequestURI = cstPath + "?" + cstRawQuery
 )
 
-func newServer(t *testing.T) *cstServer {
+func newServer(t *testing.T, c cstHandlerConfig) *cstServer {
 	var s cstServer
-	s.Server = httptest.NewServer(cstHandler{t})
+	s.Server = httptest.NewServer(cstHandler{t, c})
 	s.Server.URL += cstRequestURI
 	s.URL = makeWsProto(s.Server.URL)
 	return &s
 }
 
-func newTLSServer(t *testing.T) *cstServer {
+func newTLSServer(t *testing.T, c cstHandlerConfig) *cstServer {
 	var s cstServer
-	s.Server = httptest.NewTLSServer(cstHandler{t})
+	s.Server = httptest.NewTLSServer(cstHandler{t, c})
 	s.Server.URL += cstRequestURI
 	s.URL = makeWsProto(s.Server.URL)
 	return &s
@@ -91,6 +98,9 @@ func (t cstHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		t.Logf("subprotols=%v, want %v", subprotos, cstDialer.Subprotocols)
 		http.Error(w, "bad protocol", http.StatusBadRequest)
 		return
+	}
+	if t.contextTakeover {
+		cstUpgrader.AllowServerContextTakeover = true
 	}
 	ws, err := cstUpgrader.Upgrade(w, r, http.Header{"Set-Cookie": {"sessionID=1234"}})
 	if err != nil {
@@ -122,6 +132,28 @@ func (t cstHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		t.Logf("Close: %v", err)
 		return
 	}
+
+	// for multipleSendRecv when context takeover.
+	if t.contextTakeover {
+		op, rd, err := ws.NextReader()
+		if err != nil {
+			t.Logf("NextReader: %v", err)
+			return
+		}
+		wr, err := ws.NextWriter(op)
+		if err != nil {
+			t.Logf("NextWriter: %v", err)
+			return
+		}
+		if _, err = io.Copy(wr, rd); err != nil {
+			t.Logf("NextWriter: %v", err)
+			return
+		}
+		if err := wr.Close(); err != nil {
+			t.Logf("Close: %v", err)
+			return
+		}
+	}
 }
 
 func makeWsProto(s string) string {
@@ -148,9 +180,30 @@ func sendRecv(t *testing.T, ws *Conn) {
 	}
 }
 
+func multipleSendRecv(t *testing.T, ws *Conn) {
+	for _, message := range []string{"Hello World", "Can you read message?"} {
+		if err := ws.SetWriteDeadline(time.Now().Add(time.Second)); err != nil {
+			t.Fatalf("SetWriteDeadline: %v", err)
+		}
+		if err := ws.WriteMessage(TextMessage, []byte(message)); err != nil {
+			t.Fatalf("WriteMessage: %v", err)
+		}
+		if err := ws.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+			t.Fatalf("SetReadDeadline: %v", err)
+		}
+		_, p, err := ws.ReadMessage()
+		if err != nil {
+			t.Fatalf("ReadMessage: %v", err)
+		}
+		if string(p) != message {
+			t.Fatalf("message=%s, want %s", p, message)
+		}
+	}
+}
+
 func TestProxyDial(t *testing.T) {
 
-	s := newServer(t)
+	s := newServer(t, cstHandlerConfig{})
 	defer s.Close()
 
 	surl, _ := url.Parse(s.Server.URL)
@@ -187,7 +240,7 @@ func TestProxyDial(t *testing.T) {
 }
 
 func TestProxyAuthorizationDial(t *testing.T) {
-	s := newServer(t)
+	s := newServer(t, cstHandlerConfig{})
 	defer s.Close()
 
 	surl, _ := url.Parse(s.Server.URL)
@@ -227,7 +280,7 @@ func TestProxyAuthorizationDial(t *testing.T) {
 }
 
 func TestDial(t *testing.T) {
-	s := newServer(t)
+	s := newServer(t, cstHandlerConfig{})
 	defer s.Close()
 
 	ws, _, err := cstDialer.Dial(s.URL, nil)
@@ -239,7 +292,7 @@ func TestDial(t *testing.T) {
 }
 
 func TestDialCookieJar(t *testing.T) {
-	s := newServer(t)
+	s := newServer(t, cstHandlerConfig{})
 	defer s.Close()
 
 	jar, _ := cookiejar.New(nil)
@@ -301,7 +354,7 @@ func rootCAs(t *testing.T, s *httptest.Server) *x509.CertPool {
 }
 
 func TestDialTLS(t *testing.T) {
-	s := newTLSServer(t)
+	s := newTLSServer(t, cstHandlerConfig{})
 	defer s.Close()
 
 	d := cstDialer
@@ -315,7 +368,7 @@ func TestDialTLS(t *testing.T) {
 }
 
 func TestDialTimeout(t *testing.T) {
-	s := newServer(t)
+	s := newServer(t, cstHandlerConfig{})
 	defer s.Close()
 
 	d := cstDialer
@@ -371,7 +424,7 @@ func (c *requireDeadlineNetConn) LocalAddr() net.Addr  { return c.c.LocalAddr() 
 func (c *requireDeadlineNetConn) RemoteAddr() net.Addr { return c.c.RemoteAddr() }
 
 func TestHandshakeTimeout(t *testing.T) {
-	s := newServer(t)
+	s := newServer(t, cstHandlerConfig{})
 	defer s.Close()
 
 	d := cstDialer
@@ -387,7 +440,7 @@ func TestHandshakeTimeout(t *testing.T) {
 }
 
 func TestHandshakeTimeoutInContext(t *testing.T) {
-	s := newServer(t)
+	s := newServer(t, cstHandlerConfig{})
 	defer s.Close()
 
 	d := cstDialer
@@ -408,7 +461,7 @@ func TestHandshakeTimeoutInContext(t *testing.T) {
 }
 
 func TestDialBadScheme(t *testing.T) {
-	s := newServer(t)
+	s := newServer(t, cstHandlerConfig{})
 	defer s.Close()
 
 	ws, _, err := cstDialer.Dial(s.Server.URL, nil)
@@ -419,7 +472,7 @@ func TestDialBadScheme(t *testing.T) {
 }
 
 func TestDialBadOrigin(t *testing.T) {
-	s := newServer(t)
+	s := newServer(t, cstHandlerConfig{})
 	defer s.Close()
 
 	ws, resp, err := cstDialer.Dial(s.URL, http.Header{"Origin": {"bad"}})
@@ -436,7 +489,7 @@ func TestDialBadOrigin(t *testing.T) {
 }
 
 func TestDialBadHeader(t *testing.T) {
-	s := newServer(t)
+	s := newServer(t, cstHandlerConfig{})
 	defer s.Close()
 
 	for _, k := range []string{"Upgrade",
@@ -500,7 +553,7 @@ func TestDialExtraTokensInRespHeaders(t *testing.T) {
 }
 
 func TestHandshake(t *testing.T) {
-	s := newServer(t)
+	s := newServer(t, cstHandlerConfig{})
 	defer s.Close()
 
 	ws, resp, err := cstDialer.Dial(s.URL, http.Header{"Origin": {s.URL}})
@@ -751,7 +804,7 @@ func TestHost(t *testing.T) {
 }
 
 func TestDialCompression(t *testing.T) {
-	s := newServer(t)
+	s := newServer(t, cstHandlerConfig{})
 	defer s.Close()
 
 	dialer := cstDialer
@@ -764,8 +817,24 @@ func TestDialCompression(t *testing.T) {
 	sendRecv(t, ws)
 }
 
+func TestDialCompressionOfContextTakeover(t *testing.T) {
+	s := newServer(t, cstHandlerConfig{true})
+	defer s.Close()
+
+	dialer := cstDialer
+	dialer.EnableCompression = true
+	dialer.AllowClientContextTakeover = true
+	ws, _, err := dialer.Dial(s.URL, nil)
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer ws.Close()
+
+	multipleSendRecv(t, ws)
+}
+
 func TestSocksProxyDial(t *testing.T) {
-	s := newServer(t)
+	s := newServer(t, cstHandlerConfig{})
 	defer s.Close()
 
 	proxyListener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -868,7 +937,7 @@ func TestTracingDialWithContext(t *testing.T) {
 	}
 	ctx := httptrace.WithClientTrace(context.Background(), trace)
 
-	s := newTLSServer(t)
+	s := newTLSServer(t, cstHandlerConfig{})
 	defer s.Close()
 
 	d := cstDialer
@@ -907,7 +976,7 @@ func TestEmptyTracingDialWithContext(t *testing.T) {
 	trace := &httptrace.ClientTrace{}
 	ctx := httptrace.WithClientTrace(context.Background(), trace)
 
-	s := newTLSServer(t)
+	s := newTLSServer(t, cstHandlerConfig{})
 	defer s.Close()
 
 	d := cstDialer
