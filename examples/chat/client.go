@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/elasticperch/websocket"
+	"github.com/elasticperch/epws"
 )
 
 const (
@@ -32,7 +32,7 @@ var (
 	space   = []byte{' '}
 )
 
-var upgrader = websocket.Upgrader{
+var upgrader = epws.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 }
@@ -42,7 +42,7 @@ type Client struct {
 	hub *Hub
 
 	// The websocket connection.
-	conn *websocket.Conn
+	conn *epws.Conn
 
 	// Buffered channel of outbound messages.
 	send chan []byte
@@ -64,7 +64,7 @@ func (c *Client) readPump() {
 	for {
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+			if epws.IsUnexpectedCloseError(err, epws.CloseGoingAway, epws.CloseAbnormalClosure) {
 				log.Printf("error: %v", err)
 			}
 			break
@@ -91,11 +91,11 @@ func (c *Client) writePump() {
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
 				// The hub closed the channel.
-				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				c.conn.WriteMessage(epws.CloseMessage, []byte{})
 				return
 			}
 
-			w, err := c.conn.NextWriter(websocket.TextMessage)
+			w, err := c.conn.NextWriter(epws.TextMessage)
 			if err != nil {
 				return
 			}
@@ -113,7 +113,7 @@ func (c *Client) writePump() {
 			}
 		case <-ticker.C:
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+			if err := c.conn.WriteMessage(epws.PingMessage, nil); err != nil {
 				return
 			}
 		}

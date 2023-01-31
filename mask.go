@@ -5,7 +5,7 @@
 //go:build !appengine
 // +build !appengine
 
-package websocket
+package epws
 
 import "unsafe"
 

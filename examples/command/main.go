@@ -14,7 +14,7 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/elasticperch/websocket"
+	"github.com/elasticperch/epws"
 )
 
 var (
@@ -39,7 +39,7 @@ const (
 	closeGracePeriod = 10 * time.Second
 )
 
-func pumpStdin(ws *websocket.Conn, w io.Writer) {
+func pumpStdin(ws *epws.Conn, w io.Writer) {
 	defer ws.Close()
 	ws.SetReadLimit(maxMessageSize)
 	ws.SetReadDeadline(time.Now().Add(pongWait))
@@ -56,13 +56,13 @@ func pumpStdin(ws *websocket.Conn, w io.Writer) {
 	}
 }
 
-func pumpStdout(ws *websocket.Conn, r io.Reader, done chan struct{}) {
+func pumpStdout(ws *epws.Conn, r io.Reader, done chan struct{}) {
 	defer func() {
 	}()
 	s := bufio.NewScanner(r)
 	for s.Scan() {
 		ws.SetWriteDeadline(time.Now().Add(writeWait))
-		if err := ws.WriteMessage(websocket.TextMessage, s.Bytes()); err != nil {
+		if err := ws.WriteMessage(epws.TextMessage, s.Bytes()); err != nil {
 			ws.Close()
 			break
 		}
@@ -73,18 +73,18 @@ func pumpStdout(ws *websocket.Conn, r io.Reader, done chan struct{}) {
 	close(done)
 
 	ws.SetWriteDeadline(time.Now().Add(writeWait))
-	ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+	ws.WriteMessage(epws.CloseMessage, epws.FormatCloseMessage(epws.CloseNormalClosure, ""))
 	time.Sleep(closeGracePeriod)
 	ws.Close()
 }
 
-func ping(ws *websocket.Conn, done chan struct{}) {
+func ping(ws *epws.Conn, done chan struct{}) {
 	ticker := time.NewTicker(pingPeriod)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			if err := ws.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(writeWait)); err != nil {
+			if err := ws.WriteControl(epws.PingMessage, []byte{}, time.Now().Add(writeWait)); err != nil {
 				log.Println("ping:", err)
 			}
 		case <-done:
@@ -93,12 +93,12 @@ func ping(ws *websocket.Conn, done chan struct{}) {
 	}
 }
 
-func internalError(ws *websocket.Conn, msg string, err error) {
+func internalError(ws *epws.Conn, msg string, err error) {
 	log.Println(msg, err)
-	ws.WriteMessage(websocket.TextMessage, []byte("Internal server error."))
+	ws.WriteMessage(epws.TextMessage, []byte("Internal server error."))
 }
 
-var upgrader = websocket.Upgrader{}
+var upgrader = epws.Upgrader{}
 
 func serveWs(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)

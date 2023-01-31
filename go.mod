@@ -1,3 +1,3 @@
-module github.com/elasticperch/websocket
+module github.com/elasticperch/epws
 
-go 1.12
+go 1.19

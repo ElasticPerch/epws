@@ -4,7 +4,7 @@
 
 // !appengine
 
-package websocket
+package epws
 
 import (
 	"fmt"

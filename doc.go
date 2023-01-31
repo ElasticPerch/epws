@@ -2,14 +2,14 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package websocket implements the WebSocket protocol defined in RFC 6455.
+// Package epws implements the WebSocket protocol defined in RFC 6455.
 //
 // Overview
 //
 // The Conn type represents a WebSocket connection. A server application calls
 // the Upgrader.Upgrade method from an HTTP request handler to get a *Conn:
 //
-//  var upgrader = websocket.Upgrader{
+//  var upgrader = epws.Upgrader{
 //      ReadBufferSize:  1024,
 //      WriteBufferSize: 1024,
 //  }
@@ -40,7 +40,7 @@
 //  }
 //
 // In above snippet of code, p is a []byte and messageType is an int with value
-// websocket.BinaryMessage or websocket.TextMessage.
+// epws.BinaryMessage or epws.TextMessage.
 //
 // An application can also send and receive messages using the io.WriteCloser
 // and io.Reader interfaces. To send a message, call the connection NextWriter
@@ -110,7 +110,7 @@
 // in messages from the peer, then the application should start a goroutine to
 // read and discard messages from the peer. A simple example is:
 //
-//  func readLoop(c *websocket.Conn) {
+//  func readLoop(c *epws.Conn) {
 //      for {
 //          if _, _, err := c.NextReader(); err != nil {
 //              c.Close()
@@ -205,7 +205,7 @@
 // to true in Dialer or Upgrader will attempt to negotiate per message deflate
 // support.
 //
-//  var upgrader = websocket.Upgrader{
+//  var upgrader = epws.Upgrader{
 //      EnableCompression: true,
 //  }
 //
@@ -224,4 +224,4 @@
 // more details refer to RFC 7692.
 //
 // Use of compression is experimental and may result in decreased performance.
-package websocket
+package epws

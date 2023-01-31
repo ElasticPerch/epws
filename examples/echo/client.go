@@ -15,7 +15,7 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/elasticperch/websocket"
+	"github.com/elasticperch/epws"
 )
 
 var addr = flag.String("addr", "localhost:8080", "http service address")
@@ -30,7 +30,7 @@ func main() {
 	u := url.URL{Scheme: "ws", Host: *addr, Path: "/echo"}
 	log.Printf("connecting to %s", u.String())
 
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	c, _, err := epws.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
 		log.Fatal("dial:", err)
 	}
@@ -58,7 +58,7 @@ func main() {
 		case <-done:
 			return
 		case t := <-ticker.C:
-			err := c.WriteMessage(websocket.TextMessage, []byte(t.String()))
+			err := c.WriteMessage(epws.TextMessage, []byte(t.String()))
 			if err != nil {
 				log.Println("write:", err)
 				return
@@ -68,7 +68,7 @@ func main() {
 
 			// Cleanly close the connection by sending a close message and then
 			// waiting (with timeout) for the server to close the connection.
-			err := c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+			err := c.WriteMessage(epws.CloseMessage, epws.FormatCloseMessage(epws.CloseNormalClosure, ""))
 			if err != nil {
 				log.Println("write close:", err)
 				return

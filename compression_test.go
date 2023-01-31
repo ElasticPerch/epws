@@ -1,4 +1,4 @@
-package websocket
+package epws
 
 import (
 	"bytes"

@@ -2,34 +2,34 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package websocket_test
+package epws_test
 
 import (
 	"log"
 	"net/http"
 	"testing"
 
-	"github.com/elasticperch/websocket"
+	"github.com/elasticperch/epws"
 )
 
 var (
-	c   *websocket.Conn
+	c   *epws.Conn
 	req *http.Request
 )
 
-// The websocket.IsUnexpectedCloseError function is useful for identifying
+// The epws.IsUnexpectedCloseError function is useful for identifying
 // application and protocol errors.
 //
 // This server application works with a client application running in the
 // browser. The client application does not explicitly close the websocket. The
 // only expected close message from the client has the code
-// websocket.CloseGoingAway. All other close messages are likely the
+// epws.CloseGoingAway. All other close messages are likely the
 // result of an application or protocol error and are logged to aid debugging.
 func ExampleIsUnexpectedCloseError() {
 	for {
 		messageType, p, err := c.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
+			if epws.IsUnexpectedCloseError(err, epws.CloseGoingAway) {
 				log.Printf("error: %v, user-agent: %v", err, req.Header.Get("User-Agent"))
 			}
 			return

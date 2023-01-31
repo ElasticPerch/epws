@@ -5,7 +5,7 @@
 // data.
 //
 
-package websocket
+package epws
 
 import (
 	"errors"
